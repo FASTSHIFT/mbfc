@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(mblk_fc)
+project(mbfc)
 
 # C/C++ version
 set(CMAKE_C_STANDARD 99)
@@ -36,24 +36,24 @@ include_directories(
 )
 
 # Sources
-file(GLOB MBLK_FC_SOURCES "mblk_fc.c")
+file(GLOB mbfc_SOURCES "mbfc.c")
 
 ## ALL SOURCES
 set(SOURCES
-        ${MBLK_FC_SOURCES}
+        ${mbfc_SOURCES}
 )
 
 # Executable
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
-add_executable(mblk_fc main.c ${SOURCES} ${INCLUDES})
+add_executable(mbfc main.c ${SOURCES} ${INCLUDES})
 
 # Link
 target_link_libraries(
-        mblk_fc PRIVATE
+        mbfc PRIVATE
 )
 
 set_target_properties(
-        mblk_fc
+        mbfc
         PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build"
 )
