@@ -53,6 +53,10 @@ ssize_t mbfc_write(mbfc_t* mbfc, off_t pos, const void* buf, size_t nbyte);
 
 void mbfc_flush(mbfc_t* mbfc);
 
+int mbfc_get_cache_hit_cnt(mbfc_t* mbfc);
+
+void mbfc_reset_cache_hit_cnt(mbfc_t* mbfc);
+
 /**********************
  *      MACROS
  **********************/

@@ -17,16 +17,29 @@
  *      DEFINES
  *********************/
 
+#define MBFC_ALIGN(value, align) ((value) & ~((align)-1))
+
 #define MBFC_AGE_MAX 100
 #define MBFC_AGE_INC(cache) ((cache)->age < MBFC_AGE_MAX ? (cache)->age++ : 0)
 
-#define MBFC_ALIGN(value, align) ((value) & ~((align)-1))
-
+#ifndef MBFC_MALLOC
 #define MBFC_MALLOC(size) malloc(size)
+#endif
+
+#ifndef MBFC_FREE
 #define MBFC_FREE(ptr) free(ptr)
+#endif
+
+#ifndef MBFC_ASSERT
 #define MBFC_ASSERT(expr) assert(expr)
-#define MBFC_LOG_INFO(fmt, ...) printf(fmt, ##__VA_ARGS__)
-#define MBFC_LOG_WARN(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#endif
+
+#ifndef MBFC_LOG
+#define MBFC_LOG(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#endif
+
+#define MBFC_LOG_INFO MBFC_LOG
+#define MBFC_LOG_WARN MBFC_LOG
 
 /**********************
  *      TYPEDEFS
@@ -42,6 +55,7 @@ typedef struct mbfc_cache_s {
 struct mbfc_s {
     mbfc_param_t param;
     mbfc_cache_t* cache_arr;
+    int cache_hit_cnt;
 };
 
 /**********************
@@ -68,7 +82,7 @@ void mbfc_param_init(mbfc_param_t* param)
 {
     MBFC_ASSERT(param != NULL);
     memset(param, 0, sizeof(mbfc_param_t));
-    param->blk_size = 1024;
+    param->block_size = 1024;
     param->cache_num = 8;
 }
 
@@ -76,7 +90,7 @@ mbfc_t* mbfc_create(const mbfc_param_t* param)
 {
     MBFC_ASSERT(param != NULL);
     MBFC_ASSERT(param->fp != NULL);
-    MBFC_ASSERT(param->blk_size > 0);
+    MBFC_ASSERT(param->block_size > 0);
     MBFC_ASSERT(param->cache_num > 0);
     MBFC_ASSERT(param->read_cb != NULL);
     MBFC_ASSERT(param->write_cb != NULL);
@@ -92,9 +106,9 @@ mbfc_t* mbfc_create(const mbfc_param_t* param)
     memset(mbfc->cache_arr, 0, sizeof(mbfc_cache_t) * param->cache_num);
 
     for (int i = 0; i < param->cache_num; i++) {
-        mbfc->cache_arr[i].buf = MBFC_MALLOC(param->blk_size);
+        mbfc->cache_arr[i].buf = MBFC_MALLOC(param->block_size);
         MBFC_ASSERT(mbfc->cache_arr[i].buf != NULL);
-        memset(mbfc->cache_arr[i].buf, 0, param->blk_size);
+        memset(mbfc->cache_arr[i].buf, 0, param->block_size);
     }
 
     return mbfc;
@@ -131,6 +145,7 @@ ssize_t mbfc_read(mbfc_t* mbfc, off_t pos, void* buf, size_t nbyte)
 
         if (cache) {
             MBFC_LOG_INFO("%s: cache hit pos %d, age = %d\n", __func__, (int)pos, cache->age);
+            mbfc->cache_hit_cnt++;
         } else {
             MBFC_LOG_INFO("%s: cache miss %d\n", __func__, (int)pos);
             cache = mbfc_load_block(mbfc, pos);
@@ -192,6 +207,18 @@ void mbfc_flush(mbfc_t* mbfc)
     }
 }
 
+int mbfc_get_cache_hit_cnt(mbfc_t* mbfc)
+{
+    MBFC_ASSERT(mbfc != NULL);
+    return mbfc->cache_hit_cnt;
+}
+
+void mbfc_reset_cache_hit_cnt(mbfc_t* mbfc)
+{
+    MBFC_ASSERT(mbfc != NULL);
+    mbfc->cache_hit_cnt = 0;
+}
+
 /**********************
  *   STATIC FUNCTIONS
  **********************/
@@ -205,7 +232,7 @@ static mbfc_cache_t* mbfc_find_block(mbfc_t* mbfc, off_t pos)
             continue;
         }
 
-        pos = MBFC_ALIGN(pos, mbfc->param.blk_size);
+        pos = MBFC_ALIGN(pos, mbfc->param.block_size);
 
         if (cache->pos == pos) {
             return cache;
@@ -241,7 +268,7 @@ static void mbfc_age_dec_all(mbfc_t* mbfc)
     for (int i = 0; i < mbfc->param.cache_num; i++) {
         mbfc_cache_t* cache = &mbfc->cache_arr[i];
 
-        if (cache->age > 0) {
+        if (cache->age > 1) {
             cache->age--;
         }
     }
@@ -252,7 +279,7 @@ static mbfc_cache_t* mbfc_load_block(mbfc_t* mbfc, off_t pos)
     mbfc_cache_t* cache = mbfc_get_reuse(mbfc);
     MBFC_ASSERT(cache != NULL);
 
-    pos = MBFC_ALIGN(pos, mbfc->param.blk_size);
+    pos = MBFC_ALIGN(pos, mbfc->param.block_size);
     cache->pos = pos;
     cache->age = 0;
 
@@ -263,11 +290,11 @@ static mbfc_cache_t* mbfc_load_block(mbfc_t* mbfc, off_t pos)
         return NULL;
     }
 
-    ssize_t rd = mbfc->param.read_cb(mbfc->param.fp, cache->buf, mbfc->param.blk_size);
+    ssize_t rd = mbfc->param.read_cb(mbfc->param.fp, cache->buf, mbfc->param.block_size);
 
     if (rd <= 0) {
         MBFC_LOG_WARN("%s: cache read %zd != %zu, failed\n",
-            __func__, rd, mbfc->param.blk_size);
+            __func__, rd, mbfc->param.block_size);
         return NULL;
     }
 

@@ -75,8 +75,8 @@ int main(int argc, const char* argv[])
     mbfc_param_t param;
     mbfc_param_init(&param);
     param.fp = (void*)(intptr_t)fd;
-    param.blk_size = 32;
-    param.cache_num = 4;
+    param.block_size = 16;
+    param.cache_num = 16;
     param.read_cb = my_read_cb;
     param.write_cb = my_write_cb;
     param.seek_cb = my_seek_cb;
@@ -86,8 +86,8 @@ int main(int argc, const char* argv[])
     while (loop--) {
         uint8_t rd_buf[FILE_BUFFER_SIZE] = { 0 };
 
-        off_t pos = rand() % (FILE_BUFFER_SIZE * 2);
-        size_t rd_req_size = rand() % FILE_BUFFER_SIZE;
+        off_t pos = rand() % FILE_BUFFER_SIZE;
+        size_t rd_req_size = rand() % param.block_size;
 
         ssize_t rd_size = mbfc_read(mbfc, pos, rd_buf, rd_req_size);
 
@@ -117,6 +117,8 @@ int main(int argc, const char* argv[])
             break;
         }
     }
+
+    printf("cache hit cnt = %d\n", mbfc_get_cache_hit_cnt(mbfc));
 
     mbfc_delete(mbfc);
     close(fd);
