@@ -136,7 +136,7 @@ ssize_t mbfc_read(mbfc_t* mbfc, off_t pos, void* buf, size_t nbyte)
         return 0;
     }
 
-    ssize_t ret = -1;
+    ssize_t ret = 0;
     ssize_t remain = nbyte;
     uint8_t* cur = buf;
 
