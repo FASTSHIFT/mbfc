@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 set(ENABLE_ASAN 1)
 set(CMAKE_BUILD_TYPE "Debug")
+add_definitions(-DMBFC_USE_TEST=1)
 # set(CMAKE_BUILD_TYPE "Release")
 
 set(WARNING_FLAGS
@@ -45,7 +46,7 @@ set(SOURCES
 
 # Executable
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
-add_executable(mbfc main.c ${SOURCES} ${INCLUDES})
+add_executable(mbfc test.c ${SOURCES} ${INCLUDES})
 
 # Link
 target_link_libraries(

@@ -7,6 +7,8 @@
  *      INCLUDES
  *********************/
 
+#ifdef MBFC_USE_TEST
+
 #include "mbfc.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -119,6 +121,8 @@ int main(int argc, const char* argv[])
     mbfc_delete(mbfc);
     close(fd);
 
+    remove(file_path);
+
     if (loop > 0) {
         printf("Test failed, loop = %d\n", loop);
     } else {
@@ -163,3 +167,5 @@ static off_t my_seek_cb(void* fp, off_t pos, int whence)
 {
     return lseek((int)(intptr_t)fp, pos, whence);
 }
+
+#endif /*MBFC_USE_TEST*/
