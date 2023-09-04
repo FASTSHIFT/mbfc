@@ -63,7 +63,8 @@ struct mbfc_s {
  **********************/
 
 static mbfc_cache_t* mbfc_find_block(mbfc_t* mbfc, off_t pos);
-static mbfc_cache_t* mbfc_load_block(mbfc_t* mbfc, off_t pos);
+static mbfc_cache_t* mbfc_read_block(mbfc_t* mbfc, off_t pos);
+static mbfc_cache_t* mbfc_write_block(mbfc_t* mbfc, off_t pos);
 static void mbfc_age_dec_all(mbfc_t* mbfc);
 
 /**********************
@@ -148,9 +149,9 @@ ssize_t mbfc_read(mbfc_t* mbfc, off_t pos, void* buf, size_t nbyte)
             mbfc->cache_hit_cnt++;
         } else {
             MBFC_LOG_INFO("%s: cache miss %d\n", __func__, (int)pos);
-            cache = mbfc_load_block(mbfc, pos);
+            cache = mbfc_read_block(mbfc, pos);
             if (!cache) {
-                MBFC_LOG_WARN("%s: load block failed\n", __func__);
+                MBFC_LOG_WARN("%s: read block failed\n", __func__);
                 break;
             }
             mbfc_age_dec_all(mbfc);
@@ -174,7 +175,43 @@ ssize_t mbfc_write(mbfc_t* mbfc, off_t pos, const void* buf, size_t nbyte)
 {
     MBFC_ASSERT(mbfc != NULL);
 
-    return -1;
+    if (!buf || !nbyte) {
+        return 0;
+    }
+
+    ssize_t ret = 0;
+    ssize_t remain = nbyte;
+    const uint8_t* cur = buf;
+
+    while (remain > 0) {
+        mbfc_cache_t* cache = mbfc_find_block(mbfc, pos);
+
+        if (cache) {
+            MBFC_LOG_INFO("%s: cache hit pos %d, age = %d\n", __func__, (int)pos, cache->age);
+            mbfc->cache_hit_cnt++;
+        } else {
+            MBFC_LOG_INFO("%s: cache miss %d\n", __func__, (int)pos);
+            cache = mbfc_write_block(mbfc, pos);
+            if (!cache) {
+                MBFC_LOG_WARN("%s: write block failed\n", __func__);
+                break;
+            }
+            mbfc_age_dec_all(mbfc);
+        }
+
+        MBFC_AGE_INC(cache);
+        cache->pos = MBFC_ALIGN(pos, mbfc->param.block_size);
+
+        size_t cp = cache->size - (pos - cache->pos);
+        cp = (cp > remain) ? remain : cp;
+        memcpy(cache->buf + (pos - cache->pos), cur, cp);
+        pos += cp;
+        cur += cp;
+        remain -= cp;
+        ret += cp;
+    }
+
+    return ret;
 }
 
 void mbfc_flush(mbfc_t* mbfc)
@@ -274,7 +311,7 @@ static void mbfc_age_dec_all(mbfc_t* mbfc)
     }
 }
 
-static mbfc_cache_t* mbfc_load_block(mbfc_t* mbfc, off_t pos)
+static mbfc_cache_t* mbfc_read_block(mbfc_t* mbfc, off_t pos)
 {
     mbfc_cache_t* cache = mbfc_get_reuse(mbfc);
     MBFC_ASSERT(cache != NULL);
@@ -301,7 +338,38 @@ static mbfc_cache_t* mbfc_load_block(mbfc_t* mbfc, off_t pos)
     cache->age = 1;
     cache->size = rd;
 
-    MBFC_LOG_INFO("%s: cache load pos: %d, size = %zu\n", __func__, (int)pos, cache->size);
+    MBFC_LOG_INFO("%s: cache read pos: %d, size = %zu\n", __func__, (int)pos, cache->size);
+
+    return cache;
+}
+
+static mbfc_cache_t* mbfc_write_block(mbfc_t* mbfc, off_t pos)
+{
+    mbfc_cache_t* cache = mbfc_get_reuse(mbfc);
+    MBFC_ASSERT(cache != NULL);
+
+    if (cache->age <= 0) {
+        return cache;
+    }
+
+    off_t offset = mbfc->param.seek_cb(mbfc->param.fp, cache->pos, SEEK_SET);
+
+    if (offset < 0) {
+        MBFC_LOG_WARN("%s: cache seek %d failed\n", __func__, (int)pos);
+        return NULL;
+    }
+
+    ssize_t wr = mbfc->param.write_cb(mbfc->param.fp, cache->buf, cache->size);
+
+    if (wr <= 0) {
+        MBFC_LOG_WARN("%s: cache write %zd != %zu, failed\n",
+            __func__, wr, cache->size);
+        return NULL;
+    }
+
+    cache->age = 1;
+
+    MBFC_LOG_INFO("%s: cache write pos: %d, size = %zu\n", __func__, (int)pos, cache->size);
 
     return cache;
 }
